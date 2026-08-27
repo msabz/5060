@@ -38,9 +38,9 @@ jobs:
             printf '%s' "$G1_CI_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
             echo "G1_KEYSTORE_SOURCE=secret" >> "$GITHUB_ENV"
           else
-            # Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ù…ÙØªØ§Ø­ Ù…Ø­ÙÙˆØ¸: Ù†ÙˆÙ„Ù‘Ø¯ Ù…ÙØªØ§Ø­Ø§Ù‹ Ø¬Ø¯ÙŠØ¯Ø§Ù‹ Ø¯Ø§Ø®Ù„ CI.
-            # ØªÙ†Ø¨ÙŠÙ‡: ÙƒÙ„ ØªØ´ØºÙŠÙ„ ÙŠÙˆÙ„Ù‘Ø¯ Ù…ÙØªØ§Ø­Ø§Ù‹ Ù…Ø®ØªÙ„ÙØ§Ù‹ØŒ ÙØ§Ù„ØªØ«Ø¨ÙŠØª ÙÙˆÙ‚ Ù†Ø³Ø®Ø© Ù‚Ø¯ÙŠÙ…Ø©
-            # Ø³ÙŠÙØ´Ù„ Ø­ØªÙ‰ ØªÙØ­ÙØ¸ Ù‚ÙŠÙ…Ø© Ø§Ù„Ù…Ù„Ù Ø§Ù„Ù†Ø§ØªØ¬ ÙƒØ³Ø± G1_CI_KEYSTORE_B64.
+            # لا يوجد مفتاح محفوظ: نولّد مفتاحاً جديداً داخل CI.
+            # تنبيه: كل تشغيل يولّد مفتاحاً مختلفاً، فالتثبيت فوق نسخة قديمة
+            # سيفشل حتى تُحفظ قيمة الملف الناتج كسر G1_CI_KEYSTORE_B64.
             echo "::warning::No G1_CI_KEYSTORE_B64 secret. Generating a fresh debug keystore for this run."
             keytool -genkeypair -v \
               -keystore "$KEYSTORE" \
