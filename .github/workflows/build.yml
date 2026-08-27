@@ -1,17 +1,19 @@
-name: Build G1 DirectChat
+name: Build & Validate G1 DirectChat
 
 on:
-  workflow_dispatch:
   push:
-    paths:
-      - 'G1-DirectChat-source.zip'
-      - '.github/workflows/build.yml'
+  pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: g1-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
+  validate_and_build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,42 +28,123 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Extract source
+      - name: Prepare CI Debug Signing
+        env:
+          G1_CI_KEYSTORE_B64: ${{ secrets.G1_CI_KEYSTORE_B64 }}
         run: |
-          rm -rf appsrc
-          mkdir appsrc
-          unzip -q G1-DirectChat-source.zip -d appsrc
-          shopt -s dotglob
-          cp -a appsrc/G1-DirectChat/. .
-          rm -rf appsrc
+          KEYSTORE="$RUNNER_TEMP/g1-ci-debug-signing.jks"
+          if [ -n "$G1_CI_KEYSTORE_B64" ]; then
+            echo "Using signing key from repository secret G1_CI_KEYSTORE_B64."
+            printf '%s' "$G1_CI_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+            echo "G1_KEYSTORE_SOURCE=secret" >> "$GITHUB_ENV"
+          else
+            # Ù„Ø§ ÙŠÙˆØ¬Ø¯ Ù…ÙØªØ§Ø­ Ù…Ø­ÙÙˆØ¸: Ù†ÙˆÙ„Ù‘Ø¯ Ù…ÙØªØ§Ø­Ø§Ù‹ Ø¬Ø¯ÙŠØ¯Ø§Ù‹ Ø¯Ø§Ø®Ù„ CI.
+            # ØªÙ†Ø¨ÙŠÙ‡: ÙƒÙ„ ØªØ´ØºÙŠÙ„ ÙŠÙˆÙ„Ù‘Ø¯ Ù…ÙØªØ§Ø­Ø§Ù‹ Ù…Ø®ØªÙ„ÙØ§Ù‹ØŒ ÙØ§Ù„ØªØ«Ø¨ÙŠØª ÙÙˆÙ‚ Ù†Ø³Ø®Ø© Ù‚Ø¯ÙŠÙ…Ø©
+            # Ø³ÙŠÙØ´Ù„ Ø­ØªÙ‰ ØªÙØ­ÙØ¸ Ù‚ÙŠÙ…Ø© Ø§Ù„Ù…Ù„Ù Ø§Ù„Ù†Ø§ØªØ¬ ÙƒØ³Ø± G1_CI_KEYSTORE_B64.
+            echo "::warning::No G1_CI_KEYSTORE_B64 secret. Generating a fresh debug keystore for this run."
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE" \
+              -storepass 'g1-ci-debug-only' \
+              -keypass 'g1-ci-debug-only' \
+              -alias 'g1-ci' \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname 'CN=G1 DirectChat CI Debug, OU=G1, O=G1, L=CI, C=US'
+            mkdir -p "$RUNNER_TEMP/keystore-export"
+            base64 -w0 "$KEYSTORE" > "$RUNNER_TEMP/keystore-export/G1_CI_KEYSTORE_B64.txt"
+            echo "G1_KEYSTORE_SOURCE=generated" >> "$GITHUB_ENV"
+          fi
+          chmod 600 "$KEYSTORE"
 
-      - name: Install dependencies
-        run: npm ci
+          keytool -list \
+            -keystore "$KEYSTORE" \
+            -storepass 'g1-ci-debug-only' \
+            -alias 'g1-ci' >/dev/null
 
-      - name: JavaScript tests
-        run: npm test -- --runInBand
+          echo "G1_CI_SIGNING_STORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "G1_VERSION_CODE=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Bundle React Native JS
-        run: |
-          mkdir -p android/app/src/main/assets
-          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
-
-      - name: Generate new release signing key
-        run: |
-          keytool -genkeypair -v -keystore "$RUNNER_TEMP/g1-release.jks" -storepass 'g1-release-2026' -keypass 'g1-release-2026' -alias g1-release -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=G1 DirectChat, OU=G1, O=MSABZ, L=Birmingham, ST=England, C=GB'
-          echo "G1_RELEASE_STORE_FILE=$RUNNER_TEMP/g1-release.jks" >> "$GITHUB_ENV"
-          echo 'G1_RELEASE_STORE_PASSWORD=g1-release-2026' >> "$GITHUB_ENV"
-          echo 'G1_RELEASE_KEY_ALIAS=g1-release' >> "$GITHUB_ENV"
-          echo 'G1_RELEASE_KEY_PASSWORD=g1-release-2026' >> "$GITHUB_ENV"
-          echo 'G1_VERSION_CODE=${{ github.run_number }}' >> "$GITHUB_ENV"
-
-      - name: Build release APK
-        working-directory: android
-        run: ./gradlew assembleRelease --stacktrace
-
-      - name: Upload release APK
+      - name: Export Generated Keystore (save it as secret G1_CI_KEYSTORE_B64)
+        if: env.G1_KEYSTORE_SOURCE == 'generated'
         uses: actions/upload-artifact@v4
         with:
-          name: G1-DirectChat-release-${{ github.run_number }}
+          name: G1-CI-KEYSTORE-SAVE-AS-SECRET
+          path: ${{ runner.temp }}/keystore-export/G1_CI_KEYSTORE_B64.txt
+          retention-days: 30
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Run JavaScript Unit Tests
+        run: npm test -- --runInBand
+
+      - name: Patch WebRTC Network Monitor
+        run: node scripts/patch-webrtc.js || true
+
+      - name: Bundle React Native JS Assets
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle --platform android --dev false \
+            --entry-file index.js \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+
+      - name: Run Android Unit Tests
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew test --stacktrace
+
+      - name: Build Debug APK
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+
+      - name: Apply Stable CI Debug Signature
+        run: |
+          APK="$(find android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [ -z "$APK" ] || [ -z "$APKSIGNER" ]; then
+            echo "::error::Unable to locate debug APK or apksigner."
+            exit 1
+          fi
+
+          SIGNED_APK="${APK%.apk}-stable.apk"
+          "$APKSIGNER" sign \
+            --ks "$G1_CI_SIGNING_STORE_FILE" \
+            --ks-key-alias 'g1-ci' \
+            --ks-pass 'pass:g1-ci-debug-only' \
+            --key-pass 'pass:g1-ci-debug-only' \
+            --out "$SIGNED_APK" \
+            "$APK"
+          mv "$SIGNED_APK" "$APK"
+
+      - name: Verify Debug APK Signature
+        run: |
+          APK="$(find android/app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [ -z "$APK" ] || [ -z "$APKSIGNER" ]; then
+            echo "::error::Unable to locate debug APK or apksigner."
+            exit 1
+          fi
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "Keystore source: $G1_KEYSTORE_SOURCE"
+          echo "APK versionCode: $G1_VERSION_CODE"
+
+      - name: Build Release APK
+        run: |
+          cd android
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Upload Debug APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: G1-DirectChat-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: G1-DirectChat-release-apk
           path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
