@@ -1,0 +1,67 @@
+name: Build G1 DirectChat
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'G1-DirectChat-source.zip'
+      - '.github/workflows/build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Extract source
+        run: |
+          rm -rf appsrc
+          mkdir appsrc
+          unzip -q G1-DirectChat-source.zip -d appsrc
+          shopt -s dotglob
+          cp -a appsrc/G1-DirectChat/. .
+          rm -rf appsrc
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: JavaScript tests
+        run: npm test -- --runInBand
+
+      - name: Bundle React Native JS
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx react-native bundle --platform android --dev false --entry-file index.js --bundle-output android/app/src/main/assets/index.android.bundle --assets-dest android/app/src/main/res
+
+      - name: Generate new release signing key
+        run: |
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/g1-release.jks" -storepass 'g1-release-2026' -keypass 'g1-release-2026' -alias g1-release -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=G1 DirectChat, OU=G1, O=MSABZ, L=Birmingham, ST=England, C=GB'
+          echo "G1_RELEASE_STORE_FILE=$RUNNER_TEMP/g1-release.jks" >> "$GITHUB_ENV"
+          echo 'G1_RELEASE_STORE_PASSWORD=g1-release-2026' >> "$GITHUB_ENV"
+          echo 'G1_RELEASE_KEY_ALIAS=g1-release' >> "$GITHUB_ENV"
+          echo 'G1_RELEASE_KEY_PASSWORD=g1-release-2026' >> "$GITHUB_ENV"
+          echo 'G1_VERSION_CODE=${{ github.run_number }}' >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: G1-DirectChat-release-${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
