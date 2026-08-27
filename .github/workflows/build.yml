@@ -18,6 +18,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Unpack source archive if present
+        run: |
+          # يسمح برفع المشروع كملف zip واحد بدل 245 ملفاً (مناسب للرفع من الموبايل).
+          # إذا وُجد source.zip بجذر المستودع يُفكّ فوق الشجرة الحالية.
+          ARCHIVE="$(ls -1 *.zip 2>/dev/null | head -n 1 || true)"
+          if [ -z "$ARCHIVE" ]; then
+            echo "No source archive found; building from repository tree."
+            exit 0
+          fi
+          echo "Unpacking $ARCHIVE"
+          TMP="$RUNNER_TEMP/src-unpack"
+          rm -rf "$TMP" && mkdir -p "$TMP"
+          unzip -q "$ARCHIVE" -d "$TMP"
+          # إذا كان كل شيء داخل مجلد واحد (مثل G1-DirectChat/) ندخل إليه
+          ROOT="$TMP"
+          if [ "$(ls -1A "$TMP" | wc -l)" = "1" ] && [ -d "$TMP/$(ls -1A "$TMP")" ]; then
+            ROOT="$TMP/$(ls -1A "$TMP")"
+          fi
+          if [ ! -f "$ROOT/package.json" ]; then
+            echo "::error::package.json not found inside $ARCHIVE"
+            exit 1
+          fi
+          # لا نستبدل ملف الـ workflow الحالي حتى يبقى هو المرجع
+          rm -rf "$ROOT/.github"
+          cp -a "$ROOT/." "$GITHUB_WORKSPACE/"
+          echo "Source tree ready:"
+          ls -1A "$GITHUB_WORKSPACE" | head -n 40
+
       - uses: actions/setup-node@v4
         with:
           node-version: 18
