@@ -3,9 +3,25 @@
 `source.zip` at the repo root is the single source of truth. CI unpacks it,
 runs `npm ci` + Jest, bundles, and builds debug/release APKs.
 
-SHA-256 (this commit): `319d1e17663eaba19b83c7759e003c2daba249bf5a725fa2d7446a0c93d2e95e`
+SHA-256 (this commit): `0da4af4d3d0eca71caff9a87e3af24d739f3daf2d94436ef704aebdd26643c35`
 
-## What this archive contains (on top of 6cb077c)
+## What this archive contains (on top of the field root-fix round)
+
+### I2P) طبقة I2P المستقبلية — بنية جاهزة بلا راوتر مدمج (406 tests green)
+- `TRANSPORTS.I2P` + `peerRegistry.upsertI2pPeer`: the I2P Destination is a
+  STABLE identity — `isProvisionalPeerId` never matches `i2p:` (guarded).
+- Identity messages carry an optional `i2p` field: single injection point
+  `IdentityVerifier.setOwnI2pDestination(dest)` announces it on every
+  transport; both receive paths (signaling + Bluetooth) learn and persist it
+  via `learnPeerI2pDestination`.
+- DB v7: dedicated `peers.i2p_destination` column (never overwrites the
+  learned P2P MAC); `listPeers` returns `i2pDestination`.
+- Nearby UI already owns the Arabic label «عبر I2P (مجهول)».
+- Contract + do-NOTs documented in `docs/I2P_TRANSPORT_READINESS.md`
+  (I2P = last-resort anonymous transport for messages/files, never calls;
+  companion-router over SAM, no bundled router in the APK).
+
+### R1–R7) Field-report root causes (from previous commit on this branch)
 
 Field-report root-cause fixes ("app only works on LAN; no BT / no Wi-Fi Direct;
 QR and number add fail; video PiP empty") — 399 Jest tests, 73 suites, all green.
