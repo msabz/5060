@@ -105,3 +105,23 @@ QR and number add fail; video PiP empty").
 - CI unpacks the first `*.zip` at repo root → `G1-DirectChat/` → `npm ci` →
   Jest → bundle → debug/release APKs.
 - No new native npm dependencies. No `bindProcessToNetwork`.
+## Fallback-engine wiring round — جولة لحام محرك التراجع (425 tests green, 77 suites)
+
+SHA-1 of `source.zip`: `819bdf5f28ee33752f71f3680626a68e73ef4305`
+
+Field log root cause: `connectToContact` failed on every tap with
+«Transport fallback engine is not configured». The coordinator singleton was
+created without an engine and the shared `fallbackEngine` module was imported
+only by an unused diagnostics component, so in the production bundle its body
+never executed and the engine never attached. Fixes:
+- App.js imports the shared engine and attaches it explicitly.
+- `ConnectionCoordinator.connectPeer` lazily self-heals the shared engine
+  (lazy require avoids the module cycle).
+- Unexpected link loss now resets the auto-connect exponential backoff so
+  reconnection is immediate (~1.5 s initiator) instead of 30 s+.
+- Standby BT link send closure is honest: it refuses to write when the
+  coordinator session is no longer on Bluetooth, so the link manager falls
+  through to a live link instead of writing into a stale socket.
+- Diagnostics: auto-connect plans/outcomes and supervisor migrations are
+  logged to the in-app diagnostics screen.
+- New regression suite `fallbackEngineWiring.test.js` (3 tests).
