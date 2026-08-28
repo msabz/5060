@@ -125,3 +125,25 @@ never executed and the engine never attached. Fixes:
 - Diagnostics: auto-connect plans/outcomes and supervisor migrations are
   logged to the in-app diagnostics screen.
 - New regression suite `fallbackEngineWiring.test.js` (3 tests).
+## Channel-liveness round — جولة «لا قناة زومبي» (431 tests green, 78 suites)
+
+SHA-1 of `source.zip`: `13c6de0faa64ac1536b94fec68ed9273fd77e016`
+
+Field-log evidence: chat header showed «متصل» while sends failed with
+«لا قناة حية», and Wi-Fi Direct teardown could hang forever on
+«جاري إنهاء اتصال Wi-Fi Direct وتنظيف المجموعة…».
+Root fixes:
+- LinkManager.send now retires a link whose write fails (emits link-down
+  with reason `send-failed`) — the UI cannot show a fake «متصل» anymore.
+- Chat header derives liveness from the link engine + signaling health +
+  coordinator BT session (`peerLive`), showing «انقطع — يعيد الاتصال…» in
+  amber when every link is dead.
+- Total channel failure during a session forces the terminal-recovery path
+  immediately (`handleTerminalSignalingDisconnect({ force: true })`) instead
+  of waiting up to 18 s for the heartbeat.
+- Hard 20 s watchdog on both disconnect paths + JS-level race around native
+  `cleanupConnection` — «جاري الإنهاء» can never be permanent again.
+- Stage-level diagnostics inside the Wi-Fi Direct negotiation (group formed /
+  socket accept / socket connect / identity) so the next field log pinpoints
+  any stall.
+- New regression suite `channelLiveness.test.js` (6 tests).
