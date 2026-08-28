@@ -3,11 +3,34 @@
 `source.zip` at the repo root is the single source of truth. CI unpacks it,
 runs `npm ci` + Jest, bundles, and builds debug/release APKs.
 
-SHA-256 (this commit): `6106276664f35f43b57bed3562b58ebcba24672f4522a874dc830c46a338`
+SHA-256 (this commit): `354c6b60800f808e721e4b73c4a3d7ac3f59c01aa0467d435f7b58ece2e8c8d1`
 
-## What this archive contains (on top of the I2P readiness round)
+## Field-failure instrumentation round — جولة «لا فشل صامت» (422 tests green, 76 suites)
 
-### Make-Before-Break transport engine — إصلاح جذري لنقل الطبقات (414 tests green, 75 suites)
+Direct response to the field report ("يعمل على الشبكة المحلية فقط؛ الضغط لا
+يفتح المحادثة؛ تلفزيون يظهر كجهة اتصال؛ QR/الرقم صامتان"):
+
+- **Diagnostics subsystem**: `src/utils/diagLog.js` ring buffer (500 entries)
+  + `src/components/DiagnosticsScreen.js` (live view, share/copy) reachable
+  from the home ⋮ menu → «سجل التشخيص». Every BT/P2P/LAN/link event and every
+  connect/send failure is logged with timestamps. Field failures stop being
+  invisible.
+- **Visible status**: `statusText` now renders as a banner on HomeScreen;
+  connect failures from a contact tap raise an Alert instead of vanishing
+  into a `.catch(() => {})`.
+- **Nearby honesty (Bada/LocalSend lesson)**: native P2P layer now ships
+  `primaryDeviceType`; unconfirmed (non-DNS-SD) devices that are not phones
+  (category `10-`) — TVs, displays, printers — are hidden from «القريبون».
+  Only confirmed MusabX devices and phone-category unknowns are actionable.
+- **Bluetooth in the single window**: classic BT scan + device list now live
+  in the home add-sheet (was stranded on IdleScreen); the "اتصال عبر IP" row
+  is restored.
+- **QR truth**: camera permission is requested at scan time (not only at
+  boot), and scan/add outcomes are logged and surfaced.
+- **Engine repair**: BT identity handler again registers the RFCOMM link into
+  the LinkManager (lost in a prior snapshot) so `isReachable`/MBB see BT.
+
+### Make-Before-Break transport engine — إصلاح جذري لنقل الطبقات (previous commit)
 
 Built strictly on the reference study in `docs/REFERENCE_IMPLEMENTATIONS_STUDY.md`
 (Briar / KDE Connect / Meshenger / Bada-QuickShare / LocalSend).
