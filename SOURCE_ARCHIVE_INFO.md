@@ -147,3 +147,21 @@ Root fixes:
   socket accept / socket connect / identity) so the next field log pinpoints
   any stall.
 - New regression suite `channelLiveness.test.js` (6 tests).
+## P2P zombie-timeout round — جولة «المهلة الزومبي» (437 tests green, 80 suites)
+
+SHA-1 of `source.zip`: `732e71e730ac0a81fc7e9e8a0873602abc0d610a`
+
+Field log (Motorola) proved: session UP and messaging over Wi-Fi Direct, then
+at exactly +30 s the adapter's negotiation timeout fired and tore down the
+LIVE group — the group had been formed by the other device *before* our
+attempt, so Android never re-broadcast PEER_CONNECTED and the attempt hung
+in AWAITING_GROUP. Root fixes:
+- Adapter adopts a pre-existing group with the target peer: a deferred
+  (1.2 s) probe queries getConnectionInfo + requestPeers (status CONNECTED=0)
+  and settles immediately instead of hanging to timeout.
+- The timeout handler never cleans up a group the route-in-use checker says
+  carries a live session (wired in index.js against LinkManager/coordinator).
+- beginWifiNegotiation's catch refuses to tear down a session that is
+  actually alive (late failure after adoption via another path).
+- New regression suite `p2pGroupAdoption.test.js` (6 tests, incl. behavioral
+  adoption + no-cleanup-when-in-use + cleanup-when-unused).
